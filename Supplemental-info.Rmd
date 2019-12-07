@@ -1,0 +1,295 @@
+---
+title: "Supplement for Tree Resistance, Recovery, and Resilience from Drought Events in Sierra Mixed Conifer Forests"
+knit: (function(input_file, encoding) {
+  out_dir <- 'docs';
+  rmarkdown::render(input_file,
+ encoding=encoding,
+ output_file=file.path(dirname(input_file), out_dir, 'index.html'))})
+author: "Teresa Bohner"
+date: "12/5/2019"
+output:
+  html_document:
+    toc: true
+    toc_float: true
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(dplR)
+library(kableExtra)
+library(ggmap)
+library(rgdal)
+library(raster)
+library(viridis)
+states <- readOGR("cb_2016_us_state_500k/cb_2016_us_state_500k.shp")
+states1 <-  states[states$NAME=="California",]
+states.f <- fortify(states1, regions="STUSPS")
+
+sites <- read.csv("Raw Data/locations for prism.csv")
+```
+
+## Methods
+
+#### Collection
+I collected increment cores from _A. concolor_, _P. jeffreyi_, and _P. lambertiana_ across the state of California. I sampled from paired high and low elevation plots in four areas across a latitudinal gradient (Fig1). Sites were selected based on vegetation maps and field scouting to try and find suitable sites with similar communities as well as similar topographic and edaphic characteristics. Samples were collected between 2014 and 2019 for a total of ~240 trees sampled.
+
+```{r map, echo=F, message=F, fig.height=5, fig.width=5.5}
+
+ggplot() +
+  geom_polygon(data=states.f, aes(long,lat, group=group),color="black", fill="white") +
+  geom_point(data=sites, aes(X, Y, color=Y)) +
+  scale_color_viridis(option='plasma') +
+  theme_test() +
+  ylab("Latitude") + xlab("Longitude") +
+  labs(color="Latitude") +
+  theme(panel.background = element_rect(fill = "lightblue")) +
+  labs(caption="Figure 1. Map of core collection sites.") +
+  theme(plot.caption = element_text(face = "italic", hjust=0))
+
+
+```
+
+#### Preparation, crossdating, detrending
+Samples were prepared with standard methods outlined in (Speer 2012). Samples were imaged and crossdated in the CDendro program. I performend additional crossdating and detrending with the 'dplR' package in R. I used a 30-year spline and performed subsequent analyses on the detrended individual tree growth.
+
+```{r data, include=F}
+bm <- read.rwl("Raw Data/RWL copies/Black_Mountain.rwl")
+names(bm)[str_detect(names(bm), "11PL1_3A")==T] <- "11PL1_1C"
+names(bm)[str_detect(names(bm), "11PL1_3B")==T] <- "11PL1_1D"
+
+sp <- read.rwl("Raw Data/RWL copies/Seven_Pines.rwl")
+bm_ids <- read.ids(bm, stc=c(2,5,1))
+sp_ids <- read.ids(sp, stc=c(2,5,1))
+
+bm_id_df <- bm_ids %>%
+  mutate(label=rownames(bm_ids),
+         Site="bm",
+         Species=str_sub(label, 3, 4),
+         Neighborhood=str_sub(label, 5, 5),
+         ID=ifelse(str_detect(label, "\\_")==TRUE, str_sub(label, 7, 7), str_sub(label, 6,7)),
+         tree=as.character(tree))
+
+bm_id_df_tree <- group_by(bm_id_df, tree, Site, Species, Neighborhood, ID) %>%
+  summarise(label=first(label))
+
+sp_id_df <- sp_ids %>%
+  mutate(label=rownames(sp_ids),
+         Site="sp",
+         Species=str_sub(label, 3, 4),
+         Neighborhood=str_sub(label, 5, 5),
+         ID=ifelse(str_detect(label, "\\_")==TRUE, str_sub(label, 7, 7), str_sub(label, 6,7)),
+         tree=as.character(tree))
+sp_id_df_tree <- group_by(sp_id_df, tree, Site, Species, Neighborhood, ID) %>%
+  summarise(label=first(label))
+
+lc <- read.rwl("Raw Data/RWL copies/Lilly_Creek.rwl")
+pp <- read.rwl("Raw Data/RWL copies/Peppermint.rwl")
+lc_ids <- read.ids(lc, stc=c(2,5,1))
+pp_ids <- read.ids(pp, stc=c(2,5,1))
+
+lc_id_df <- lc_ids %>%
+  mutate(label=rownames(lc_ids),
+         Site="lc",
+         Species=str_sub(label, 3, 4),
+         Neighborhood=str_sub(label, 5, 5), 
+         ID=str_sub(label, 7, 7),
+         tree=as.character(tree))
+lc_id_df_tree <- group_by(lc_id_df, tree, Site, Species, Neighborhood, ID) %>%
+  summarise(label=first(label))
+
+pp_id_df <- pp_ids %>%
+  mutate(label=rownames(pp_ids),
+         Site="pp",
+         Species=str_sub(label, 3, 4),
+         Neighborhood=str_sub(label, 5, 5), 
+         ID=str_sub(label, 7, 7),
+         tree=as.character(tree))
+pp_id_df_tree <- group_by(pp_id_df, tree, Site, Species, Neighborhood, ID) %>%
+  summarise(label=first(label))
+
+cm <- read.rwl("Raw Data/RWL copies/Crescent_Meadow.rwl")
+names(cm)[str_detect(names(cm), "4PJ2_1A")==T] <- "4PP2_1A"
+names(cm)[str_detect(names(cm), "4PJ2_1B")==T] <- "4PP2_1B"
+pr <- read.rwl("Raw Data/RWL copies/Pine_Ridge.rwl")
+cm_ids1 <- read.ids(cm[,which(str_length(colnames(cm))==7)], stc=c(1,5,1))
+cm_ids2 <- read.ids(cm[,which(str_length(colnames(cm))==8)], stc=c(1,6,1))
+cm_ids2$tree <- cm_ids2$tree + max(cm_ids1$tree)
+cm_ids <- rbind(cm_ids1, cm_ids2)
+
+pr_ids1 <- read.ids(pr[,which(str_length(colnames(pr))==7)], stc=c(1,5,1))
+pr_ids2 <- read.ids(pr[,which(str_length(colnames(pr))==8)], stc=c(1,6,1))
+pr_ids2$tree <- pr_ids2$tree + max(pr_ids1$tree)
+pr_ids3 <- read.ids(pr[,which(str_length(colnames(pr))==6)], stc=c(1,5,5))
+pr_ids3$tree <- pr_ids3$tree + max(pr_ids2$tree)
+pr_ids <- rbind(pr_ids1, pr_ids2, pr_ids3)
+
+cm_id_df <- cm_ids %>%
+  mutate(label=rownames(cm_ids),
+         Site="cm",
+         Species=str_sub(label, 2, 3),
+         tree=as.character(tree))
+cm_id_df$Neighborhood <- NA
+for(i in 1:nrow(cm_id_df)) {
+  if(str_detect(cm_id_df$label[i], "_")==TRUE) {
+    cm_id_df$Neighborhood[i] <- str_sub(cm_id_df$label[i], 4, 4)
+  } else NA
+}
+cm_id_df$ID <- NA
+for(i in 1:nrow(cm_id_df)) {
+  if(str_detect(cm_id_df$label[i], "_")==TRUE) {
+    cm_id_df$ID[i] <- str_sub(cm_id_df$label[i], 6, 6)
+  } else cm_id_df$ID[i] <- str_sub(cm_id_df$label[i], 4, 7)
+}
+cm_id_df$ID <- str_replace_all(cm_id_df$ID, "A", "")
+cm_id_df$ID <- str_replace_all(cm_id_df$ID, "B", "")
+cm_id_df$Neighborhood <- ifelse(cm_id_df$ID%in%c(102, 105, 117, 118, 122), 1, 
+                                ifelse(cm_id_df$ID%in%c(1924, 3064, 3085, 3101), 2,
+                                       ifelse(cm_id_df$ID%in%c(1954, 1959, 1965, 1966, 1967), 3, cm_id_df$Neighborhood))) 
+
+cm_id_df_tree <- group_by(cm_id_df, tree, Site, Species, Neighborhood, ID) %>%
+  summarise(label=first(label))
+
+pr_id_df <- pr_ids %>%
+  mutate(label=rownames(pr_ids),
+         Site="pr",
+         Species=str_sub(label, 2, 3),
+         tree=as.character(tree))
+pr_id_df$Neighborhood <- NA
+for(i in 1:nrow(pr_id_df)) {
+  if(str_detect(pr_id_df$label[i], "_")==TRUE) {
+    pr_id_df$Neighborhood[i] <- str_sub(pr_id_df$label[i], 4, 4)
+  } else NA
+}
+pr_id_df$ID <- NA
+for(i in 1:nrow(pr_id_df)) {
+  if(str_detect(pr_id_df$label[i], "_")==TRUE) {
+    pr_id_df$ID[i] <- str_sub(pr_id_df$label[i], 6, 6)
+  } else pr_id_df$ID[i] <- str_sub(pr_id_df$label[i], 4, 7)
+}
+pr_id_df$ID <- str_replace_all(pr_id_df$ID, "A", "")
+pr_id_df$ID <- str_replace_all(pr_id_df$ID, "B", "")
+
+pr_id_df$ID[which(pr_id_df$ID==5434)] <- 543
+
+pr_id_df$Neighborhood <- ifelse(pr_id_df$ID%in%c(497, 3150, 3157), 1,
+                                ifelse(pr_id_df$ID%in%c(528, 533, 543, 552, 3001), 2,
+                                       ifelse(pr_id_df$ID%in%c(598, 604), 3, pr_id_df$Neighborhood)))
+
+pr_id_df_tree <- group_by(pr_id_df, tree, Site, Species, Neighborhood, ID) %>%
+  summarise(label=first(label))
+
+
+ic <- read.rwl("Raw Data/RWL copies/Inyo_Craters.rwl")
+names(ic)[str_detect(names(ic), "9AC1_1A")==T] <- "9AM1_1A"
+names(ic)[str_detect(names(ic), "9AC1_1B")==T] <- "9AM1_1B"
+sl <- read.rwl("Raw Data/RWL copies/Sherwin_Lakes.rwl")
+ic_ids <- read.ids(ic, stc=c(1,5,1))
+sl_ids <- read.ids(sl, stc=c(2,5,1))
+
+ic_id_df <- ic_ids %>%
+  mutate(label=rownames(ic_ids),
+         Site="ic",
+         Species=str_sub(label, 2, 3),
+         Neighborhood=str_sub(label, 4, 4), 
+         ID=str_sub(label, 6, 6),
+         tree=as.character(tree))
+ic_id_df_tree <- group_by(ic_id_df, tree, Site, Species, Neighborhood, ID) %>%
+  summarise(label=first(label))
+
+sl_id_df <- sl_ids %>%
+  mutate(label=rownames(sl_ids),
+         Site="sl",
+         Species=str_sub(label, 3, 4),
+         Neighborhood=str_sub(label, 5, 5), 
+         ID=str_sub(label, 7, 7),
+         tree=as.character(tree))
+sl_id_df_tree <- group_by(sl_id_df, tree, Site, Species, Neighborhood, ID) %>%
+  summarise(label=first(label))
+
+for(i in c("sp", "bm", "lc", "pp", "pr", "cm", "ic", "sl")){ 
+  temp <- get(i)
+  temp[temp == 0] <- NA
+  treeave <- treeMean(temp, get(paste(i,"_ids", sep="")), na.rm = T)
+  zero <- fill.internal.NA(treeave, 0)
+  zero$Year <- as.numeric(rownames(zero))
+
+  treeave <- fill.internal.NA(treeave, "Mean")
+  raw <- treeave
+  raw$Year <- as.numeric(rownames(raw))
+  
+  bai <- bai.out(raw, diam = NULL)
+  bai$Year <- as.numeric(rownames(bai))
+  
+  spl <- detrend(rwl = treeave, method="Spline")
+  spl$Year <- as.numeric(rownames(spl))
+  
+  fss <- detrend(rwl = treeave, method="Friedman")
+  fss$Year <- as.numeric(rownames(fss))
+  
+  dat<- gather(zero, key="tree", "temp", -Year) %>%
+    mutate(zeroRing=ifelse(temp==0, "yes", "no")) %>% 
+    dplyr::select(-temp) %>% 
+    left_join(gather(raw, key="tree", "raw_growth", -Year)) %>%
+    left_join(gather(bai, key="tree", "BAI", -Year)) %>%
+    left_join(gather(spl, key="tree", "spline_growth", -Year)) %>%
+    left_join(gather(fss, key="tree", "fss_growth", -Year)) %>%
+    na.omit() %>%
+    left_join(get(paste(i,"_id_df_tree", sep=""))) %>%
+    filter(Year>=1895)
+  
+  if(i=="sp"){allrings_loop <- dat
+  } else allrings_loop <- rbind(allrings_loop, dat)
+  
+}
+
+```
+##### Crossdating summary stats
+```{r summarystats, echo=FALSE}
+sj_summary <- bind_rows(rwi.stats(sp, sp_ids, prewhiten=T)%>% mutate(site='seven pines'),
+                        rwi.stats(bm, bm_ids, prewhiten=T)%>% mutate(site='black mountain'))
+sj_summary <- sj_summary[c(14, 1:13)]
+kable(sj_summary, caption = "San Jacinto") %>% kable_styling()
+
+senf_summary <- bind_rows(rwi.stats(lc, lc_ids, prewhiten=T)%>% mutate(site='lilly creek'),
+                        rwi.stats(pp, pp_ids, prewhiten=T)%>% mutate(site='peppermint'))
+senf_summary <- senf_summary[c(14, 1:13)]
+kable(senf_summary, caption = "Sequoia National Forest") %>% kable_styling()
+
+seki_summary <- bind_rows(rwi.stats(cm, cm_ids, prewhiten=T)%>% mutate(site='crescent meadow'),
+                        rwi.stats(pr, pr_ids, prewhiten=T)%>% mutate(site='pine ridge'))
+seki_summary <- seki_summary[c(14, 1:13)]
+kable(seki_summary, caption = "Sequoia National Park") %>% kable_styling()
+
+mamm_summary <- bind_rows(rwi.stats(ic, ic_ids, prewhiten=T)%>% mutate(site='inyo craters'),
+                        rwi.stats(sl, sl_ids, prewhiten=T)%>% mutate(site='sherwin lakes'))
+mamm_summary <- mamm_summary[c(14, 1:13)]
+kable(mamm_summary, caption = "Mammoth Lakes") %>% kable_styling()
+```
+
+#### Drought selection and index calculation.
+I used the Standardized Precipitation-Evapotranspiration Index (SPEI) as a measure of water availability, or drought severity.  To calculate SPEI I used monthly precipitation and temperature from 30 arc-second resolution PRISM data (PRISM, 2004) using the 'spei' package in R. Droughts were selected as the bottom 15^th^ percentile SPEI years calcluated for each site individually. All calculations were based on the hydrologic year (September - August).
+
+```{r spei, echo=F, warning=F}
+spei <- read.csv("Processed Data/precip_temp_spei.csv") 
+
+ggplot(filter(spei, Site=="bm"), aes(hydroyear, spei12, fill=spei12)) +
+  geom_bar(stat='identity') +
+  scale_fill_viridis(option='magma') +
+  theme_test() + theme(legend.position = 'none') +
+  geom_hline(yintercept = 0) +
+  xlab("Winter Year") + ylab("SPEI") +
+  labs(caption="Figure 2. Annual SPEI estimates from the high elevation site at San Jacinto (lowest latitude).") +
+  theme(plot.caption = element_text(face = "italic", hjust=0))
+
+```
+
+#### Modeling
+To calculate $RWI_{pred}$ I modeled RWI as a function Species and SPEI I used the 'brms' package in R. 
+$$
+RWI_{pred_{i}} = \alpha_{site_{i}} + \beta_{1 site_{i}}*Species_{i} + \beta_{2site_{i}}*SPEI_{i} + \beta_{3site_{i}}*Species_{i}*SPEI_{i}
+$$
+
+## Results
+
+
