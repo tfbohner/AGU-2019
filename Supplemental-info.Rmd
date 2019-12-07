@@ -343,7 +343,7 @@ p2 <- ggplot(legacy_id, aes(log(hegyi), legacy_mean, color=Region1)) +
   theme(legend.position = 'none')
 
 grid.arrange(p1, p2, ncol = 2, 
-             bottom = textGrob("Figure 4. Relationship between competition and a) growth reduction as well as b) recovery varies regionally. Each point represents \n the average of an individual over multiple drought events.", gp = gpar(fontsize = 9, fontfamily='sans', fontface='italic'), x = .08, y = 0.6,just="left"))
+             bottom = textGrob("Figure 4. Relationship between competition and a) growth reduction as well as b) recovery varies regionally. Each \n point represents the average of an individual over multiple drought events.", gp = gpar(fontsize = 9, fontfamily='sans', fontface='italic'), x = .08, y = 0.6,just="left"))
 
 ```
 
