@@ -18,6 +18,8 @@ knitr::opts_chunk$set(echo = TRUE)
 library(tidyverse)
 library(dplR)
 library(kableExtra)
+library(grid)
+library(gridExtra)
 library(ggmap)
 library(rgdal)
 library(raster)
@@ -285,11 +287,65 @@ ggplot(filter(spei, Site=="bm"), aes(hydroyear, spei12, fill=spei12)) +
 ```
 
 #### Modeling
-To calculate $RWI_{pred}$ I modeled RWI as a function Species and SPEI I used the 'brms' package in R. 
+To calculate $RWI_{pred}$ I modeled RWI as a function Species and SPEI I used the 'brms' package in R. For simplicity I denoted here site-specific regression coefficients, but they were modeled as elevation nested within region.
 $$
 RWI_{pred_{i}} = \alpha_{site_{i}} + \beta_{1 site_{i}}*Species_{i} + \beta_{2site_{i}}*SPEI_{i} + \beta_{3site_{i}}*Species_{i}*SPEI_{i}
 $$
 
 ## Results
+
+Although larger trees have worse recovery, we do not see the same pattern with growth reduction (Fig 3). The effect of competition on growth reduction and recovery varied regionally and in some cases is contrary to what we would expect (Fig 4). For example in Fig 4 b) recovery rates increase in areas of high competition in the San Jacinto mountains.
+```{r, echo=F}
+legacy_id <- read.csv("Processed Data/legacy_id.csv") %>% 
+  mutate(legacy_mean=legacy_mean*(-1))
+
+ggplot(legacy_id, aes(DBH, drought_fx, color=Region1)) +
+  geom_point() +
+  geom_smooth(method='lm', se=F) +
+  scale_color_viridis(discrete=TRUE, option="plasma", 
+                      name="Latitude",
+                      breaks=c("lat1", "lat2", "lat3", "lat4"),
+                      labels=c("San Jacinto", "Sequoia NF", "Sequioia NP", "Mammoth")) +
+  theme_test() +
+  ylab("Growth Reduction") + xlab("Size (DBH)") +
+  labs(caption="Figure 3. Relationship between DBH and growth reduction averaged at the individual level. Each point \n represents the average of an individual over multiple drought events.") +
+  theme(plot.caption = element_text(face = "italic", hjust=0))
+
+# anova(lm(drought_fx~DBH*Region, data=legacy_id))
+
+# anova(lm(drought_fx~log(hegyi)*Species, data=legacy_id))
+# anova(lm(legacy_mean~log(hegyi)*Species, data=legacy_id))
+
+p1 <- ggplot(legacy_id, aes(log(hegyi), drought_fx, color=Region1)) +
+  geom_point() +
+  geom_smooth(method='lm', se=F) +
+  scale_color_viridis(discrete=TRUE, option="plasma", 
+                      name="Latitude",
+                      breaks=c("lat1", "lat2", "lat3", "lat4"),
+                      labels=c("San Jacinto", "Sequoia NF", "Sequioia NP", "Mammoth")) +
+  theme_test() +
+  ylab("Growth Reduction") + xlab("Competition log(hegyi)") +
+  ggtitle("a)") + 
+  theme(legend.position = 'none')
+  
+p2 <- ggplot(legacy_id, aes(log(hegyi), legacy_mean, color=Region1)) +
+  geom_point() +
+  geom_smooth(method='lm', se=F) +
+  scale_color_viridis(discrete=TRUE, option="plasma", 
+                      name="Latitude",
+                      breaks=c("lat1", "lat2", "lat3", "lat4"),
+                      labels=c("San Jacinto", "Sequoia NF", "Sequioia NP", "Mammoth")) +
+  theme_test() +
+  ylab("Recovery") + xlab("Competition log(hegyi)") +
+  # labs(caption="Figure 4. Relationship between competition and growth reduction as well as recovery varies regionally and \n across elevations. Each point represents the average of an individual over multiple drought events.") +
+  # theme(plot.caption = element_text(face = "italic", hjust=0)) +
+  ggtitle("b)") + 
+  theme(legend.position = 'none')
+
+grid.arrange(p1, p2, ncol = 2, 
+             bottom = textGrob("Figure 4. Relationship between competition and a) growth reduction as well as b) recovery varies regionally. Each point represents \n the average of an individual over multiple drought events.", gp = gpar(fontsize = 9, fontfamily='sans', fontface='italic'), x = .08, y = 0.6,just="left"))
+
+```
+
 
 
