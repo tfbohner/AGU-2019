@@ -21,6 +21,8 @@ library(kableExtra)
 library(grid)
 library(gridExtra)
 library(ggmap)
+library(ggpmisc)
+library(ggsignif)
 library(rgdal)
 library(raster)
 library(viridis)
@@ -291,6 +293,38 @@ To calculate $RWI_{pred}$ I modeled RWI as a function Species and SPEI I used th
 $$
 RWI_{pred_{i}} = \alpha_{site_{i}} + \beta_{1 site_{i}}*Species_{i} + \beta_{2site_{i}}*SPEI_{i} + \beta_{3site_{i}}*Species_{i}*SPEI_{i}
 $$
+```{r allgrowth, echo=F, warning=F}
+tree_rings <- read.csv("Processed Data/matched_rings_field.csv")
+climate <- read.csv("Processed Data/precip_temp_spei.csv") %>% 
+  mutate(Site=str_sub(Name, 1,2),
+         Neighborhood=as.numeric(str_sub(Name, 3,3))) %>% 
+  dplyr::select(-c(Name, hydroyear, siteno, Region, hilo)) #
+
+alldata <- left_join(tree_rings, climate, by=c("Site", "Neighborhood", "Year"))
+
+datasub <- filter(alldata, zeroRing=="no", Year>2005)
+datasub <- filter(alldata, zeroRing=="no", Species!="AM", Site!="Mammoth") 
+datasub$Species[str_which(datasub$Species, "PP")] <- "PJ" 
+datasub$Species <- droplevels(datasub$Species)
+
+ggplot(datasub, aes(spei12, spline_growth, color=Species)) +
+  geom_point() +
+  geom_smooth(method='lm', color='darkgrey') +
+  scale_color_viridis(discrete = T, direction=-1) +
+  stat_fit_glance(method = "lm",
+                  label.y = "top",
+                  method.args = list(formula = y ~ x),
+                  mapping = aes(label = sprintf('r^2~"="~%.3f~~italic(P)~"="~%.2g',
+                                stat(r.squared), stat(p.value))),
+                  parse = TRUE) +
+  theme_test() +
+  facet_grid(rows=vars(Region), cols=vars(Species)) +
+  ylab("growth (RWI)") + xlab("Water Availability (SPEI)") +
+  theme(legend.position='none') +
+  labs(caption="Figure 3. SPEI and growth for all years. Each point represents growth of an individual tree in an individual year.") +
+  theme(plot.caption = element_text(face = "italic", hjust=0))
+
+```
 
 ## Results
 
@@ -308,7 +342,7 @@ ggplot(legacy_id, aes(DBH, drought_fx, color=Region1)) +
                       labels=c("San Jacinto", "Sequoia NF", "Sequioia NP", "Mammoth")) +
   theme_test() +
   ylab("Growth Reduction") + xlab("Size (DBH)") +
-  labs(caption="Figure 3. Relationship between DBH and growth reduction averaged at the individual level. Each point \n represents the average of an individual over multiple drought events.") +
+  labs(caption="Figure 4. Relationship between DBH and growth reduction averaged at the individual level. Each point \n represents the average of an individual over multiple drought events.") +
   theme(plot.caption = element_text(face = "italic", hjust=0))
 
 # anova(lm(drought_fx~DBH*Region, data=legacy_id))
@@ -343,9 +377,101 @@ p2 <- ggplot(legacy_id, aes(log(hegyi), legacy_mean, color=Region1)) +
   theme(legend.position = 'none')
 
 grid.arrange(p1, p2, ncol = 2, 
-             bottom = textGrob("Figure 4. Relationship between competition and a) growth reduction as well as b) recovery varies regionally. Each \n point represents the average of an individual over multiple drought events.", gp = gpar(fontsize = 9, fontfamily='sans', fontface='italic'), x = .08, y = 0.6,just="left"))
+             bottom = textGrob("Figure 5. Relationship between competition and a) growth reduction as well as b) recovery varies regionally. Each \n point represents the average of an individual over multiple drought events.", gp = gpar(fontsize = 9, fontfamily='sans', fontface='italic'), x = .08, y = 0.6,just="left"))
 
 ```
 
+The following figures display the same relationships as the main figures from the poster, however the points are not summarized - each point represents a unique tree-year combination.
+
+```{r alldata, echo=F, warning=F}
+l_leg2 <- read.csv("Processed Data/legacy_long.csv") %>% 
+  mutate(recovery=legacy_mean*(-1))
+
+p1 <- ggplot(l_leg2, aes(spei12, drought_fx, color=spei12)) +
+  geom_point() +
+  geom_smooth(method="lm", se=F, color="black") +
+  scale_color_viridis(option="plasma") +
+  scale_x_reverse() +
+  theme_test() +
+  xlab("Drought Intensity (SPEI)") +
+  ylab("Growth Reduction") +
+  theme(legend.position = 'none') +
+  # theme(axis.text = element_text(size=16), 
+  #       axis.title = element_text(size=16),
+  #       plot.title = element_text(size = 22, face = "bold")) +
+  stat_fit_glance(method = "lm",
+                  label.y = "bottom",
+                  method.args = list(formula = y ~ x),
+                  mapping = aes(label = sprintf('r^2~"="~%.3f~~italic(P)~"="~%.2g',
+                                stat(r.squared), stat(p.value))),
+                  parse = TRUE) +
+  ggtitle("a)") 
+
+p2 <- ggplot(l_leg2, aes(drought_fx, recovery, color=drought_fx)) +
+  geom_point() +
+  geom_smooth(method="lm", se=F, color="black") +
+  scale_color_viridis(direction = -1) +
+  theme_test() +
+  ylab("Recovery") +
+  xlab("Growth Reduction") +
+  theme(legend.position = 'none') +
+  # theme(axis.text = element_text(size=16), 
+  #       axis.title = element_text(size=16),
+  #       plot.title = element_text(size = 22, face = "bold")) +
+  stat_fit_glance(method = "lm",
+                  label.y = "bottom",
+                  method.args = list(formula = y ~ x),
+                  mapping = aes(label = sprintf('r^2~"="~%.3f~~italic(P)~"="~%.2g',
+                                stat(r.squared), stat(p.value))),
+                  parse = TRUE) +
+  ggtitle("b)")
+
+grid.arrange(p1, p2, ncol = 2, 
+             bottom = textGrob("Figure 6. Relationship between a) drought intensity and growth reduction and  b) growth reduction and \n  recovery. Each point represents a unique tree-year combination.", gp = gpar(fontsize = 9, fontfamily='sans', fontface='italic'), x = .08, y = 0.6,just="left"))
+
+p3 <- ggplot(l_leg2, aes(Species, drought_fx, fill=Species)) +
+  geom_jitter(aes(color=Species), alpha=0.2) +
+  geom_boxplot(alpha=1, outlier.shape = NA) +
+  theme_test() +
+  ylab("Growth Reduction") + xlab("") +
+  geom_hline(yintercept=0, linetype='dashed') +
+  theme(legend.position = 'none') +
+  scale_x_discrete(labels=c("AC"="A. concolor", "PJ"="P. jeffreyi", "PL"="P. lambertiana")) +
+  scale_color_viridis(discrete=TRUE, direction=-1) +
+  scale_fill_viridis(discrete=TRUE, direction=-1) +
+  # theme(axis.text = element_text(size=16), axis.text.x = element_text(angle = 25, hjust=0.8), 
+  #       axis.title = element_text(size=16),
+  #       plot.title = element_text(size = 22, face = "bold")) +
+  ylim(-1,1.5) +
+  geom_signif(comparisons = list(c("PJ", "AC")),
+              map_signif_level=TRUE, y_position = 1) +
+  geom_signif(comparisons = list(c("PL", "AC")),
+              map_signif_level=TRUE, y_position = 1.2) +
+  ggtitle("a)")
+
+p4 <- ggplot(l_leg2, aes(Species, legacy_mean*(-1), fill=Species)) +
+  geom_jitter(aes(color=Species), alpha=0.2) +
+  geom_boxplot(alpha=1, outlier.shape = NA) +
+  theme_test() +
+  ylab("Recovery") + xlab("") +
+  geom_hline(yintercept=0, linetype='dashed') +
+  theme(legend.position = 'none') +
+  scale_x_discrete(labels=c("AC"="A. concolor", "PJ"="P. jeffreyi", "PL"="P. lambertiana")) +
+  ylim(-1,1.5) +
+  scale_color_viridis(discrete=TRUE, direction=-1) +
+  scale_fill_viridis(discrete=TRUE, direction=-1) +
+  # theme(axis.text = element_text(size=16), axis.text.x = element_text(angle = 25, hjust=0.8), 
+  #       axis.title = element_text(size=16),
+  #       plot.title = element_text(size = 22, face = "bold")) +
+  geom_signif(comparisons = list(c("PL", "PJ")),
+              map_signif_level=TRUE, y_position = 0.8) +
+  geom_signif(comparisons = list(c("PL", "AC")),
+              map_signif_level=TRUE, y_position = 1) +
+  ggtitle("b)")
+
+grid.arrange(p3, p4, nrow = 1, 
+             bottom = textGrob("Figure 7. Average a) growth impact and b) recovery rate  after drought. Each point represents a unique  \n tree-year combination.", gp = gpar(fontsize = 9, fontfamily='sans', fontface='italic'), x = .08, y = 0.6,just="left"))
+
+```
 
 
